@@ -2,17 +2,19 @@
 // Licensed under the MIT license.
 
 import { env, record, Recorder, RecorderEnvironmentSetup } from "@azure-tools/test-recorder";
-import { CallingServerClient, CreateCallConnectionOptions, PlayAudioOptions } from "../../src";
+import { CallingServerClient, CreateCallConnectionOptions, HoldParticipantMeetingAudioOptions, PlayAudioOptions, ResumeParticipantMeetingAudioOptions } from "../../src";
 import { TestUtils } from "./utils/testUtils";
 import { Context } from "mocha";
 import * as Constants from "./utils/constants";
 import { CommunicationIdentityClient } from "@azure/communication-identity";
 import { CommunicationUserIdentifier, PhoneNumberIdentifier } from "@azure/communication-common";
+import assert from "assert";
+
 const replaceableVariables: { [k: string]: string } = {
   COMMUNICATION_LIVETEST_STATIC_CONNECTION_STRING: "endpoint=https://endpoint/;accesskey=banana",
   COMMUNICATION_LIVETEST_STATIC_RESOURCE_IDENTIFIER: "016a7064-0581-40b9-be73-6dde64d69d72",
-  AZURE_PHONE_NUMBER: "+15551234567",
-  ALTERNATE_CALLERID: "+18445764430"
+  AZURE_PHONE_NUMBER: "+18334241267",
+  ALTERNATE_CALLERID: "+18334241267"
 };
 
 const environmentSetup: RecorderEnvironmentSetup = {
@@ -110,7 +112,7 @@ describe("Call Connection Live Test", function() {
       );
       try {
         const added_participant_id = TestUtils.getFixedUserId(
-          "0000000d-b2e1-af9d-02c3-593a0d00388b"
+          "0000000e-267d-2286-290c-113a0d007812"
         );
         const participant: CommunicationUserIdentifier = {
           communicationUserId: added_participant_id
@@ -123,6 +125,161 @@ describe("Call Connection Live Test", function() {
         await TestUtils.delayIfLive();
         await callConnection.removeParticipant(participant);
       } finally {
+        // Hangup call
+        await TestUtils.delayIfLive();
+        await callConnection.hangUp();
+      }
+    });
+
+    it("Run create_mute_unmute_hangup scenario", async function(this: Context) {
+      this.timeout(0);
+      const to_phone_number = env.AZURE_PHONE_NUMBER;
+      const callingServer = new CallingServerClient(connectionString);
+      const identityClient = new CommunicationIdentityClient(connectionString);
+      const from_user = await identityClient.createUser();
+      const to_user: PhoneNumberIdentifier = {
+        phoneNumber: to_phone_number
+      };
+      const from_phone_number = env.ALTERNATE_CALLERID;
+      // create call option
+      const createCallOptions: CreateCallConnectionOptions = {
+        callbackUrl: Constants.CALLBACK_URL,
+        requestedMediaTypes: ["audio"],
+        requestedCallEvents: ["participantsUpdated", "toneReceived"],
+        alternateCallerId: { phoneNumber: from_phone_number }
+      };
+      const callConnection = await callingServer.createCallConnection(
+        from_user,
+        [to_user],
+        createCallOptions
+      );
+      try {
+        const added_participant_id = TestUtils.getFixedUserId(
+          "0000000e-267d-2286-290c-113a0d007812"
+        );
+        const participant: CommunicationUserIdentifier = {
+          communicationUserId: added_participant_id
+        };
+        // Add Participant
+        await TestUtils.delayIfLive();
+        await callConnection.addParticipant(participant);
+
+        // Mute participant
+        await TestUtils.delayIfLive();
+        await callConnection.muteParticipant(participant);
+
+        // Get participant
+        await TestUtils.delayIfLive();
+        let mutedParticipant = await callConnection.getParticipant(participant);
+        assert.strictEqual(mutedParticipant.isMuted, true);
+
+        
+        // UnMute participant
+        await TestUtils.delayIfLive();
+        await callConnection.unmuteParticipant(participant);
+        // Get participant
+        await TestUtils.delayIfLive();
+        let unmutedParticipant = await callConnection.getParticipant(participant);
+        assert.strictEqual(unmutedParticipant.isMuted, false);
+
+
+        // Remove Participant
+        await TestUtils.delayIfLive();
+        await callConnection.removeParticipant(participant);
+      } finally {
+        // Hangup call
+        await TestUtils.delayIfLive();
+        await callConnection.hangUp();
+      }
+    });
+
+    it("Run create_hold_resume_hangup scenario", async function(this: Context) {
+      this.timeout(0);
+      const to_phone_number = env.AZURE_PHONE_NUMBER;
+      const callingServer = new CallingServerClient(connectionString);
+      const identityClient = new CommunicationIdentityClient(connectionString);
+      const from_user = await identityClient.createUser();
+      const to_user: PhoneNumberIdentifier = {
+        phoneNumber: to_phone_number
+      };
+      const from_phone_number = env.ALTERNATE_CALLERID;
+      // create call option
+      const createCallOptions: CreateCallConnectionOptions = {
+        callbackUrl: Constants.CALLBACK_URL,
+        requestedMediaTypes: ["audio"],
+        requestedCallEvents: ["participantsUpdated", "toneReceived"],
+        alternateCallerId: { phoneNumber: from_phone_number }
+      };
+      const callConnection = await callingServer.createCallConnection(
+        from_user,
+        [to_user],
+        createCallOptions
+      );
+      try {
+        const added_participant_id = TestUtils.getFixedUserId(
+          "0000000e-267d-2286-290c-113a0d007812"
+        );
+        const participant: CommunicationUserIdentifier = {
+          communicationUserId: added_participant_id
+        };
+        // Add Participant
+        await TestUtils.delayIfLive();
+        await callConnection.addParticipant(participant);
+
+        // Hold participant audio
+        await TestUtils.delayIfLive();
+        let hold_option:HoldParticipantMeetingAudioOptions = {}
+        let holdResult = await callConnection.holdParticipantMeetingAudio(participant,hold_option);
+
+        // Resume participant audio
+        await TestUtils.delayIfLive();
+        let resume_option:ResumeParticipantMeetingAudioOptions = {}
+        let resumeResult = await callConnection.resumeParticipantMeetingAudio(participant,resume_option);
+
+        // Remove Participant
+        await TestUtils.delayIfLive();
+        await callConnection.removeParticipant(participant);
+      }
+      catch(e){
+        console.log(e)
+      }
+      finally {
+        // Hangup call
+        await TestUtils.delayIfLive();
+        await callConnection.hangUp();
+      }
+    });
+    it("Run create_keep_alive_delete scenario", async function(this: Context) {
+      this.timeout(0);
+      const to_phone_number = env.AZURE_PHONE_NUMBER;
+      const callingServer = new CallingServerClient(connectionString);
+      const identityClient = new CommunicationIdentityClient(connectionString);
+      const from_user = await identityClient.createUser();
+      const to_user: PhoneNumberIdentifier = {
+        phoneNumber: to_phone_number
+      };
+      const from_phone_number = env.ALTERNATE_CALLERID;
+      // create call option
+      const createCallOptions: CreateCallConnectionOptions = {
+        callbackUrl: Constants.CALLBACK_URL,
+        requestedMediaTypes: ["audio"],
+        requestedCallEvents: ["participantsUpdated", "toneReceived"],
+        alternateCallerId: { phoneNumber: from_phone_number }
+      };
+      const callConnection = await callingServer.createCallConnection(
+        from_user,
+        [to_user],
+        createCallOptions
+      );
+      try {
+        // check keep alive
+        let keep = await callConnection.keepAlive()
+         
+        // Delete call
+        await TestUtils.delayIfLive();
+        await callConnection.delete()
+      }
+      finally {
         // Hangup call
         await TestUtils.delayIfLive();
         await callConnection.hangUp();

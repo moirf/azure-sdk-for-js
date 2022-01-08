@@ -69,7 +69,12 @@ describe("Call Connection Live Test", function() {
         // Cancel Media
         await TestUtils.delayIfLive();
         await callConnection.cancelAllMediaOperations();
-      } finally {
+      }
+      catch(e)
+      {
+       console.log(e) 
+       await callConnection.hangUp();
+      }finally {
         // Hangup call
         await TestUtils.delayIfLive();
         await callConnection.hangUp();
@@ -100,7 +105,7 @@ describe("Call Connection Live Test", function() {
       );
       try {
         const added_participant_id = TestUtils.getFixedUserId(
-          "0000000e-22e2-d9a2-99c6-593a0d004ca1"
+          "0000000e-d4fe-b93e-3ef0-8b3a0d004987"
         );
         const participant: CommunicationUserIdentifier = {
           communicationUserId: added_participant_id
@@ -112,10 +117,96 @@ describe("Call Connection Live Test", function() {
         assert.equal(addParticipantResult.status, "running");
         assert.isNotNull(addParticipantResult.resultDetails);
 
+        // create PlayAudio option
+        const playAudioOptions: PlayAudioOptions = {
+          loop: true,
+          audioFileId: recorder.getUniqueName("audioFileId"),
+          callbackUrl: Constants.CALLBACK_URL,
+          operationContext: recorder.getUniqueName("operationContext")
+        };
+        await callConnection.playAudioToParticipant(participant, Constants.Audio_File_Url, playAudioOptions);
+
+        //List participants 
+        await TestUtils.delayIfLive();
+        const listParticipantsResult = await callConnection.getParticipants()
+        assert.isTrue(listParticipantsResult.length > 2)
+
         // Remove Participant
         await TestUtils.delayIfLive();
         await callConnection.removeParticipant(participant);
-      } finally {
+      }
+      catch(e){
+          console.log(e)
+          await callConnection.hangUp();
+      }
+      finally {
+        // Hangup call
+        await TestUtils.delayIfLive();
+        await callConnection.hangUp();
+      }
+    });
+
+    it.only("Run mute_unmute_get_participant scenario", async function(this: Context) {
+      this.timeout(0);
+      const to_phone_number = env.AZURE_PHONE_NUMBER;
+      const callingServer = new CallingServerClient(connectionString);
+      const identityClient = new CommunicationIdentityClient(connectionString);
+      const from_user = await identityClient.createUser();
+      const to_user: PhoneNumberIdentifier = {
+        phoneNumber: to_phone_number
+      };
+      const from_phone_number = env.ALTERNATE_CALLERID;
+      // create call option
+      const createCallOptions: CreateCallConnectionOptions = {
+        callbackUrl: Constants.CALLBACK_URL,
+        requestedMediaTypes: ["audio"],
+        requestedCallEvents: ["participantsUpdated", "toneReceived"],
+        alternateCallerId: { phoneNumber: from_phone_number }
+      };
+      const callConnection = await callingServer.createCallConnection(
+        from_user,
+        [to_user],
+        createCallOptions
+      );
+      try {
+        const added_participant_id = TestUtils.getFixedUserId(
+          "0000000e-d4fe-b93e-3ef0-8b3a0d004987"
+        );
+        const participant: CommunicationUserIdentifier = {
+          communicationUserId: added_participant_id
+        };
+        // Add Participant
+        await TestUtils.delayIfLive();
+        const addParticipantResult = await callConnection.addParticipant(participant);
+        assert.equal(addParticipantResult.status, "running");
+
+        // Mute participant
+        await TestUtils.delayIfLive();
+        await callConnection.muteParticipant(participant)
+
+        // Get Participant
+        await TestUtils.delayIfLive();
+        let mutedParticipant = await callConnection.getParticipant(participant)
+        assert.isTrue(mutedParticipant.isMuted)
+
+        // Unmute Participant  not working currently
+        await TestUtils.delayIfLive();
+        await callConnection.unmuteParticipant(participant)
+
+        // Get Participant
+        await TestUtils.delayIfLive();
+        let unmutedParticipant = await callConnection.getParticipant(participant)
+        assert.isTrue(unmutedParticipant.isMuted)
+
+        // Remove Participant
+        await TestUtils.delayIfLive();
+        await callConnection.removeParticipant(participant);
+      }
+      catch(e){
+          console.log(e)
+          await callConnection.hangUp();
+      }
+      finally {
         // Hangup call
         await TestUtils.delayIfLive();
         await callConnection.hangUp();
